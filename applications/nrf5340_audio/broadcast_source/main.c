@@ -22,7 +22,25 @@
 #include "fw_info_app.h"
 
 #include <zephyr/logging/log.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/drivers/watchdog.h>
+
+
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
+
+static void wdt_callback(struct k_timer *);
+K_TIMER_DEFINE(my_timer, wdt_callback, NULL);
+
+#define DISCONNECTION_INDICATOR_TIMEOUT 7
+
+static void wdt_callback(struct k_timer * )
+{
+	// Reset the timer
+	k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+
+	// Blink the blue LED to indicate that the sink is disconnected
+	led_blink(LED_APP_1_BLUE);
+}
 
 ZBUS_SUBSCRIBER_DEFINE(button_evt_sub, CONFIG_BUTTON_MSG_SUB_QUEUE_SIZE);
 
@@ -136,36 +154,36 @@ static void button_msg_sub_thread(void)
 
 		switch (msg.button_pin) {
 		case BUTTON_PLAY_PAUSE:
-			if (strm_state == STATE_STREAMING) {
-				ret = broadcast_source_stop(0);
-				if (ret) {
-					LOG_WRN("Failed to stop broadcaster: %d", ret);
-				}
-			} else if (strm_state == STATE_PAUSED) {
-				ret = broadcast_source_start(0, ext_adv);
-				if (ret) {
-					LOG_WRN("Failed to start broadcaster: %d", ret);
-				}
-			} else {
-				LOG_WRN("In invalid state: %d", strm_state);
-			}
+			// if (strm_state == STATE_STREAMING) {
+			// 	ret = broadcast_source_stop(0);
+			// 	if (ret) {
+			// 		LOG_WRN("Failed to stop broadcaster: %d", ret);
+			// 	}
+			// } else if (strm_state == STATE_PAUSED) {
+			// 	ret = broadcast_source_start(0, ext_adv);
+			// 	if (ret) {
+			// 		LOG_WRN("Failed to start broadcaster: %d", ret);
+			// 	}
+			// } else {
+			// 	LOG_WRN("In invalid state: %d", strm_state);
+			// }
 
 			break;
 
 		case BUTTON_4:
-			if (IS_ENABLED(CONFIG_AUDIO_TEST_TONE)) {
-				if (strm_state != STATE_STREAMING) {
-					LOG_WRN("Not in streaming state");
-					break;
-				}
+			// if (IS_ENABLED(CONFIG_AUDIO_TEST_TONE)) {
+			// 	if (strm_state != STATE_STREAMING) {
+			// 		LOG_WRN("Not in streaming state");
+			// 		break;
+			// 	}
 
-				ret = audio_system_encode_test_tone_step();
-				if (ret) {
-					LOG_WRN("Failed to play test tone, ret: %d", ret);
-				}
+			// 	ret = audio_system_encode_test_tone_step();
+			// 	if (ret) {
+			// 		LOG_WRN("Failed to play test tone, ret: %d", ret);
+			// 	}
 
-				break;
-			}
+			// 	break;
+			// }
 
 			break;
 
@@ -206,8 +224,6 @@ static void le_audio_msg_sub_thread(void)
 
 			audio_system_start();
 			stream_state_set(STATE_STREAMING);
-			ret = led_blink(LED_APP_1_BLUE);
-			ERR_CHK(ret);
 
 			break;
 
@@ -223,8 +239,6 @@ static void le_audio_msg_sub_thread(void)
 
 			stream_state_set(STATE_PAUSED);
 			audio_system_stop();
-			ret = led_on(LED_APP_1_BLUE);
-			ERR_CHK(ret);
 
 			break;
 
@@ -516,6 +530,87 @@ static void broadcast_create(struct broadcast_source_big *broadcast_param)
 }
 #endif /* CONFIG_CUSTOM_BROADCASTER */
 
+#define BT_ACK_MONITOR_STACK_SIZE 1024  // Stack size in bytes
+#define BT_ACK_MONITOR_PRIORITY 7       // Thread priority (lower number means higher priority)
+
+K_THREAD_STACK_DEFINE(bt_ack_monitor_stack_area, BT_ACK_MONITOR_STACK_SIZE);
+#define STREAMING_ACTIVE "nRF5340_audio_ack"
+
+static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
+                         struct net_buf_simple *ad)
+{
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+
+    // Parse advertising data to find the device name
+    while (ad->len > 1) {
+        uint8_t len = net_buf_simple_pull_u8(ad);
+        uint8_t type = net_buf_simple_pull_u8(ad);
+
+        if (len == 0) {
+            break;
+        }
+
+        switch (type) {
+            case BT_DATA_NAME_SHORTENED:
+            case BT_DATA_NAME_COMPLETE: {
+                char name[256];
+                int name_len = len - 1;
+
+                if (name_len > (sizeof(name) - 1)) {
+                    name_len = sizeof(name) - 1;
+                }
+
+                memcpy(name, ad->data, name_len);
+                name[name_len] = '\0';
+
+				// Check if the device name is "nRF5340_audio_ack"
+				if (strcmp(name, STREAMING_ACTIVE) == 0)
+				{
+					// Device found! Kick the watchdog
+					k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+
+					LOG_INF("Sink found! All is well! Kicking watchdog!:D");
+
+					// Streaming active!
+					led_on(LED_APP_1_BLUE);
+				}
+                break;
+            }
+            default:
+                break;
+        }
+
+        net_buf_simple_pull(ad, len - 1);
+    }
+}
+
+void bt_ack_monitor_thread()
+{
+	struct bt_le_scan_param scan_param = {
+		.type       = BT_LE_SCAN_TYPE_PASSIVE,
+		.options    = BT_LE_SCAN_OPT_NONE,
+		.interval   = 0x0010,
+		.window     = 0x0010,
+	};
+
+	while(true)
+	{
+		bt_le_scan_start(&scan_param, device_found);
+
+		k_sleep(K_MSEC(1500));
+
+		bt_le_scan_stop();
+
+		k_sleep(K_MSEC(750));
+	}
+}
+
+void watchdog_init()
+{
+	k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+}
+
 int main(void)
 {
 	int ret;
@@ -567,6 +662,22 @@ int main(void)
 	ret = bt_mgmt_adv_start(0, ext_adv_buf[0], ext_adv_buf_cnt, &per_adv_buf[0],
 				per_adv_buf_cnt, false);
 	ERR_CHK_MSG(ret, "Failed to start first advertiser");
+
+	// Create thread to periodically monitor for a Bluetooth advertisement
+	// with the name "nRF5340_audio_ack", this will be used to determine
+	// if the broadcast sink is connected to the broadcast source
+	struct k_thread bt_ack_monitor_thread_data;
+
+	k_tid_t my_tid = k_thread_create(&bt_ack_monitor_thread_data, bt_ack_monitor_stack_area, BT_ACK_MONITOR_STACK_SIZE,
+		bt_ack_monitor_thread, NULL, NULL, NULL, BT_ACK_MONITOR_PRIORITY, 0, K_NO_WAIT);
+
+	// Silence compiler warning
+	(void)my_tid;
+
+	led_blink(LED_APP_1_BLUE);
+
+	// Initialize the watchdog
+	watchdog_init();
 
 	return 0;
 }

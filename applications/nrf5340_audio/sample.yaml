@@ -19,6 +19,11 @@ tests:
     platform_exclude: nrf5340_audio_dk/nrf5340/cpuapp_ns
     tags: ci_build sysbuild
     extra_args: FILE_SUFFIX=release CONFIG_AUDIO_DEV=2
+    extra_configs:
+      - CONFIG_BT_OBSERVER=y
+      - CONFIG_BT_PERIPHERAL=y
+      - CONFIG_WATCHDOG=y
+      - CONFIG_WDT_DISABLE_AT_BOOT=n
   applications.nrf5340_audio.headset_sd_card_playback:
     sysbuild: true
     build_only: true

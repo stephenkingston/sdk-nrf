@@ -22,10 +22,10 @@ static struct board_version board_rev;
 
 static int leds_set(void)
 {
-	int ret;
+	int ret = 0;
 
 	/* Blink LED 3 to indicate that APP core is running */
-	ret = led_blink(LED_APP_3_GREEN);
+	// ret = led_blink(LED_APP_3_GREEN);
 	if (ret) {
 		return ret;
 	}
@@ -35,13 +35,13 @@ static int leds_set(void)
 
 	channel_assignment_get(&channel);
 
-	if (channel == AUDIO_CH_L) {
-		ret = led_on(LED_APP_RGB, LED_COLOR_BLUE);
-	} else {
-		ret = led_on(LED_APP_RGB, LED_COLOR_MAGENTA);
-	}
+	// if (channel == AUDIO_CH_L) {
+	// 	ret = led_on(LED_APP_RGB, LED_COLOR_BLUE);
+	// } else {
+	// 	ret = led_on(LED_APP_RGB, LED_COLOR_MAGENTA);
+	// }
 #elif (CONFIG_AUDIO_DEV == GATEWAY)
-	ret = led_on(LED_APP_RGB, LED_COLOR_GREEN);
+	// ret = led_on(LED_APP_RGB, LED_COLOR_GREEN);
 #endif /* (CONFIG_AUDIO_DEV == HEADSET) */
 
 	if (ret) {

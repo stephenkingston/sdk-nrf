@@ -693,6 +693,6 @@ int broadcast_source_enable(struct broadcast_source_big const *const broadcast_p
 	initialized = true;
 
 	LOG_DBG("Broadcast source enabled");
-
+	
 	return 0;
 }

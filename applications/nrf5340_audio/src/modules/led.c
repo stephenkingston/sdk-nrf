@@ -59,19 +59,19 @@ static struct led_unit_cfg led_units[LED_UNIT_MAX];
 /**
  * @brief Configures fields for a RGB LED
  */
-static int configure_led_color(uint8_t led_unit, uint8_t led_color, uint8_t led)
-{
-	if (!device_is_ready(leds[led].port)) {
-		LOG_ERR("LED GPIO controller not ready");
-		return -ENODEV;
-	}
+// static int configure_led_color(uint8_t led_unit, uint8_t led_color, uint8_t led)
+// {
+// 	if (!device_is_ready(leds[led].port)) {
+// 		LOG_ERR("LED GPIO controller not ready");
+// 		return -ENODEV;
+// 	}
 
-	led_units[led_unit].type.color[led_color] = &leds[led];
-	led_units[led_unit].unit_type = LED_COLOR;
+// 	led_units[led_unit].type.color[led_color] = &leds[led];
+// 	led_units[led_unit].unit_type = LED_COLOR;
 
-	return gpio_pin_configure_dt(led_units[led_unit].type.color[led_color],
-				     GPIO_OUTPUT_INACTIVE);
-}
+// 	return gpio_pin_configure_dt(led_units[led_unit].type.color[led_color],
+// 				     GPIO_OUTPUT_INACTIVE);
+// }
 
 /**
  * @brief Configures fields for a monochrome LED
@@ -106,22 +106,22 @@ static int led_device_tree_parse(void)
 		}
 
 		if (strstr(led_labels[i], "LED_RGB_RED")) {
-			ret = configure_led_color(led_unit, RED, i);
-			if (ret) {
-				return ret;
-			}
+			// ret = configure_led_color(led_unit, RED, i);
+			// if (ret) {
+			// 	return ret;
+			// }
 
 		} else if (strstr(led_labels[i], "LED_RGB_GREEN")) {
-			ret = configure_led_color(led_unit, GRN, i);
-			if (ret) {
-				return ret;
-			}
+			// ret = configure_led_color(led_unit, GRN, i);
+			// if (ret) {
+			// 	return ret;
+			// }
 
 		} else if (strstr(led_labels[i], "LED_RGB_BLUE")) {
-			ret = configure_led_color(led_unit, BLU, i);
-			if (ret) {
-				return ret;
-			}
+			// ret = configure_led_color(led_unit, BLU, i);
+			// if (ret) {
+			// 	return ret;
+			// }
 
 		} else if (strstr(led_labels[i], "LED_MONO")) {
 			ret = config_led_monochrome(led_unit, i);

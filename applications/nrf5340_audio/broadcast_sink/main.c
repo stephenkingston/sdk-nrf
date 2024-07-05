@@ -22,6 +22,13 @@
 #include "le_audio_rx.h"
 #include "fw_info_app.h"
 
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <bluetooth/services/gattp.h>
+#include <bluetooth/gatt_dm.h>
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
 
@@ -54,6 +61,19 @@ K_THREAD_STACK_DEFINE(button_msg_sub_thread_stack, CONFIG_BUTTON_MSG_SUB_STACK_S
 K_THREAD_STACK_DEFINE(le_audio_msg_sub_thread_stack, CONFIG_LE_AUDIO_MSG_SUB_STACK_SIZE);
 
 static enum stream_state strm_state = STATE_PAUSED;
+
+// Service to indicate bluetooth streaming is okay
+#define STREAMING_ACTIVE "nRF5340_audio_ack"
+#define STREAMING_ACTIVE_LEN (sizeof(STREAMING_ACTIVE) - 1)
+
+#define BT_LE_ADV_CUSTOM_NCONN BT_LE_ADV_PARAM(0, BT_GAP_PER_ADV_SLOW_INT_MIN, \
+					BT_GAP_PER_ADV_SLOW_INT_MAX, NULL)
+
+static const struct bt_data adv_streaming_active[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, STREAMING_ACTIVE, STREAMING_ACTIVE_LEN),
+};
+
 
 /* Function for handling all stream state changes */
 static void stream_state_set(enum stream_state stream_state_new)
@@ -89,19 +109,19 @@ static void button_msg_sub_thread(void)
 
 		switch (msg.button_pin) {
 		case BUTTON_PLAY_PAUSE:
-			if (strm_state == STATE_STREAMING) {
-				ret = broadcast_sink_stop();
-				if (ret) {
-					LOG_WRN("Failed to stop broadcast sink: %d", ret);
-				}
-			} else if (strm_state == STATE_PAUSED) {
-				ret = broadcast_sink_start();
-				if (ret) {
-					LOG_WRN("Failed to start broadcast sink: %d", ret);
-				}
-			} else {
-				LOG_WRN("In invalid state: %d", strm_state);
-			}
+			// if (strm_state == STATE_STREAMING) {
+			// 	ret = broadcast_sink_stop();
+			// 	if (ret) {
+			// 		LOG_WRN("Failed to stop broadcast sink: %d", ret);
+			// 	}
+			// } else if (strm_state == STATE_PAUSED) {
+			// 	ret = broadcast_sink_start();
+			// 	if (ret) {
+			// 		LOG_WRN("Failed to start broadcast sink: %d", ret);
+			// 	}
+			// } else {
+			// 	LOG_WRN("In invalid state: %d", strm_state);
+			// }
 
 			break;
 
@@ -122,19 +142,19 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_4:
-			ret = broadcast_sink_change_active_audio_stream();
-			if (ret) {
-				LOG_WRN("Failed to change active audio stream: %d", ret);
-			}
+			// ret = broadcast_sink_change_active_audio_stream();
+			// if (ret) {
+			// 	LOG_WRN("Failed to change active audio stream: %d", ret);
+			// }
 
 			break;
 
 		case BUTTON_5:
 			if (IS_ENABLED(CONFIG_AUDIO_MUTE)) {
-				ret = bt_r_and_c_volume_mute(false);
-				if (ret) {
-					LOG_WRN("Failed to mute, ret: %d", ret);
-				}
+				// ret = bt_r_and_c_volume_mute(false);
+				// if (ret) {
+				// 	LOG_WRN("Failed to mute, ret: %d", ret);
+				// }
 
 				break;
 			}
@@ -202,7 +222,11 @@ static void le_audio_msg_sub_thread(void)
 
 			audio_system_start();
 			stream_state_set(STATE_STREAMING);
-			ret = led_blink(LED_APP_1_BLUE);
+			ret = led_on(LED_APP_3_GREEN);
+
+			// Start broadcasting ACK advertisement
+			bt_le_adv_start(BT_LE_ADV_CUSTOM_NCONN, adv_streaming_active, ARRAY_SIZE(adv_streaming_active), NULL, 0);
+
 			ERR_CHK(ret);
 
 			break;
@@ -217,7 +241,7 @@ static void le_audio_msg_sub_thread(void)
 
 			stream_state_set(STATE_PAUSED);
 			audio_system_stop();
-			ret = led_on(LED_APP_1_BLUE);
+			ret = led_blink(LED_APP_3_GREEN);
 			ERR_CHK(ret);
 
 			break;
@@ -251,6 +275,10 @@ static void le_audio_msg_sub_thread(void)
 
 		case LE_AUDIO_EVT_SYNC_LOST:
 			LOG_INF("Sync lost");
+			ret = led_blink(LED_APP_3_GREEN);
+
+			// Stop broadcasting ACK advertisement
+			bt_le_adv_stop();
 
 			ret = bt_mgmt_pa_sync_delete(msg.pa_sync);
 			if (ret) {
@@ -260,7 +288,7 @@ static void le_audio_msg_sub_thread(void)
 			if (strm_state == STATE_STREAMING) {
 				stream_state_set(STATE_PAUSED);
 				audio_system_stop();
-				ret = led_on(LED_APP_1_BLUE);
+				// ret = led_on(LED_APP_1_BLUE);
 				ERR_CHK(ret);
 			}
 
@@ -295,6 +323,7 @@ static void le_audio_msg_sub_thread(void)
 
 		default:
 			LOG_WRN("Unexpected/unhandled le_audio event: %d", msg.event);
+			ret = led_blink(LED_APP_3_GREEN);
 
 			break;
 		}
@@ -479,6 +508,10 @@ int main(void)
 	ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, CONFIG_BT_AUDIO_BROADCAST_NAME,
 				 BRDCAST_ID_NOT_USED);
 	ERR_CHK_MSG(ret, "Failed to start scanning");
+
+	// Start blinking - we are not connected yet
+	ret = led_blink(LED_APP_3_GREEN);
+	ERR_CHK(ret);
 
 	return 0;
 }
