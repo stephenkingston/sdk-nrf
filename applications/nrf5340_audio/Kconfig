@@ -25,6 +25,15 @@ config AUDIO_DEV
 	  as a HEADSET device.
 	  Setting to 2 will compile as a GATEWAY.
 
+config SINK_NUMBER
+	int "Used for proper LED indication for the two supported sinks; Can be 1 or 2"
+	range 1 2
+	default 1
+	help
+	  Setting this variable to 1 selects that the project is compiled
+	  for the first sink (ACK will stop blue LED blinking).
+	  Setting to 2 will compile for the second sink (ACK will stop green LED blinking).
+
 choice NRF5340_AUDIO_TRANSPORT_MODE
 	prompt "Choose BIS or CIS for ISO transport"
 	default TRANSPORT_CIS if WALKIE_TALKIE_DEMO

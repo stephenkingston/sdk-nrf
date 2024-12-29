@@ -63,7 +63,14 @@ K_THREAD_STACK_DEFINE(le_audio_msg_sub_thread_stack, CONFIG_LE_AUDIO_MSG_SUB_STA
 static enum stream_state strm_state = STATE_PAUSED;
 
 // Service to indicate bluetooth streaming is okay
-#define STREAMING_ACTIVE "nRF5340_audio_ack"
+#if CONFIG_SINK_NUMBER == 1
+#define STREAMING_ACTIVE "nRF5340_audio_ack_sink_1"
+#elif CONFIG_SINK_NUMBER == 2
+#define STREAMING_ACTIVE "nRF5340_audio_ack_sink_2"
+#else
+#error "Unsupported number of sinks"
+#endif
+
 #define STREAMING_ACTIVE_LEN (sizeof(STREAMING_ACTIVE) - 1)
 
 #define BT_LE_ADV_CUSTOM_NCONN BT_LE_ADV_PARAM(0, BT_GAP_PER_ADV_SLOW_INT_MIN, \
@@ -109,20 +116,6 @@ static void button_msg_sub_thread(void)
 
 		switch (msg.button_pin) {
 		case BUTTON_PLAY_PAUSE:
-			// if (strm_state == STATE_STREAMING) {
-			// 	ret = broadcast_sink_stop();
-			// 	if (ret) {
-			// 		LOG_WRN("Failed to stop broadcast sink: %d", ret);
-			// 	}
-			// } else if (strm_state == STATE_PAUSED) {
-			// 	ret = broadcast_sink_start();
-			// 	if (ret) {
-			// 		LOG_WRN("Failed to start broadcast sink: %d", ret);
-			// 	}
-			// } else {
-			// 	LOG_WRN("In invalid state: %d", strm_state);
-			// }
-
 			break;
 
 		case BUTTON_VOLUME_UP:
@@ -142,20 +135,10 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_4:
-			// ret = broadcast_sink_change_active_audio_stream();
-			// if (ret) {
-			// 	LOG_WRN("Failed to change active audio stream: %d", ret);
-			// }
-
 			break;
 
 		case BUTTON_5:
 			if (IS_ENABLED(CONFIG_AUDIO_MUTE)) {
-				// ret = bt_r_and_c_volume_mute(false);
-				// if (ret) {
-				// 	LOG_WRN("Failed to mute, ret: %d", ret);
-				// }
-
 				break;
 			}
 
@@ -288,7 +271,6 @@ static void le_audio_msg_sub_thread(void)
 			if (strm_state == STATE_STREAMING) {
 				stream_state_set(STATE_PAUSED);
 				audio_system_stop();
-				// ret = led_on(LED_APP_1_BLUE);
 				ERR_CHK(ret);
 			}
 

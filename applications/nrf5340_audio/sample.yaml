@@ -5,13 +5,20 @@ common:
   integration_platforms:
     - nrf5340_audio_dk/nrf5340/cpuapp
 tests:
-  applications.nrf5340_audio.headset:
+  applications.nrf5340_audio.sink_1:
     sysbuild: true
     build_only: true
     platform_allow: nrf5340_audio_dk/nrf5340/cpuapp
     platform_exclude: nrf5340_audio_dk/nrf5340/cpuapp_ns
     tags: ci_build sysbuild
-    extra_args: FILE_SUFFIX=release CONFIG_AUDIO_DEV=1
+    extra_args: FILE_SUFFIX=release CONFIG_AUDIO_DEV=1 CONFIG_SINK_NUMBER=1
+  applications.nrf5340_audio.sink_2:
+    sysbuild: true
+    build_only: true
+    platform_allow: nrf5340_audio_dk/nrf5340/cpuapp
+    platform_exclude: nrf5340_audio_dk/nrf5340/cpuapp_ns
+    tags: ci_build sysbuild
+    extra_args: FILE_SUFFIX=release CONFIG_AUDIO_DEV=1 CONFIG_SINK_NUMBER=2
   applications.nrf5340_audio.gateway:
     sysbuild: true
     build_only: true

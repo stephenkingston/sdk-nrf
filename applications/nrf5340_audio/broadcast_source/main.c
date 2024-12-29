@@ -28,18 +28,31 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
 
-static void wdt_callback(struct k_timer *);
-K_TIMER_DEFINE(my_timer, wdt_callback, NULL);
+// We support indicating connection loss for two sinks by blinking LEDs
+static void wdt_callback_sink_1(struct k_timer *);
+K_TIMER_DEFINE(my_timer, wdt_callback_sink_1, NULL);
+
+static void wdt_callback_sink_2(struct k_timer *);
+K_TIMER_DEFINE(my_timer_2, wdt_callback_sink_2, NULL);
 
 #define DISCONNECTION_INDICATOR_TIMEOUT 7
 
-static void wdt_callback(struct k_timer * )
+static void wdt_callback_sink_1(struct k_timer * )
 {
 	// Reset the timer
 	k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
 
-	// Blink the blue LED to indicate that the sink is disconnected
+	// Blink the blue LED to indicate that sink 1 is disconnected
 	led_blink(LED_APP_1_BLUE);
+}
+
+static void wdt_callback_sink_2(struct k_timer * )
+{
+	// Reset the timer
+	k_timer_start(&my_timer_2, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+
+	// Blink the green LED to indicate that sink 2 is disconnected
+	led_blink(LED_APP_3_GREEN);
 }
 
 ZBUS_SUBSCRIBER_DEFINE(button_evt_sub, CONFIG_BUTTON_MSG_SUB_QUEUE_SIZE);
@@ -154,37 +167,9 @@ static void button_msg_sub_thread(void)
 
 		switch (msg.button_pin) {
 		case BUTTON_PLAY_PAUSE:
-			// if (strm_state == STATE_STREAMING) {
-			// 	ret = broadcast_source_stop(0);
-			// 	if (ret) {
-			// 		LOG_WRN("Failed to stop broadcaster: %d", ret);
-			// 	}
-			// } else if (strm_state == STATE_PAUSED) {
-			// 	ret = broadcast_source_start(0, ext_adv);
-			// 	if (ret) {
-			// 		LOG_WRN("Failed to start broadcaster: %d", ret);
-			// 	}
-			// } else {
-			// 	LOG_WRN("In invalid state: %d", strm_state);
-			// }
-
 			break;
 
 		case BUTTON_4:
-			// if (IS_ENABLED(CONFIG_AUDIO_TEST_TONE)) {
-			// 	if (strm_state != STATE_STREAMING) {
-			// 		LOG_WRN("Not in streaming state");
-			// 		break;
-			// 	}
-
-			// 	ret = audio_system_encode_test_tone_step();
-			// 	if (ret) {
-			// 		LOG_WRN("Failed to play test tone, ret: %d", ret);
-			// 	}
-
-			// 	break;
-			// }
-
 			break;
 
 		default:
@@ -534,7 +519,8 @@ static void broadcast_create(struct broadcast_source_big *broadcast_param)
 #define BT_ACK_MONITOR_PRIORITY 7       // Thread priority (lower number means higher priority)
 
 K_THREAD_STACK_DEFINE(bt_ack_monitor_stack_area, BT_ACK_MONITOR_STACK_SIZE);
-#define STREAMING_ACTIVE "nRF5340_audio_ack"
+#define STREAMING_ACTIVE_SINK_1 "nRF5340_audio_ack_sink_1"
+#define STREAMING_ACTIVE_SINK_2 "nRF5340_audio_ack_sink_2"
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
                          struct net_buf_simple *ad)
@@ -565,15 +551,27 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type
                 name[name_len] = '\0';
 
 				// Check if the device name is "nRF5340_audio_ack"
-				if (strcmp(name, STREAMING_ACTIVE) == 0)
+				if (strcmp(name, STREAMING_ACTIVE_SINK_1) == 0)
 				{
 					// Device found! Kick the watchdog
 					k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
 
-					LOG_INF("Sink found! All is well! Kicking watchdog!:D");
+					LOG_INF("Sink 1 found! All is well! Kicking watchdog!:D");
 
 					// Streaming active!
 					led_on(LED_APP_1_BLUE);
+				}
+
+				// Check if the device name is "nRF5340_audio_ack_sink_2"
+				if (strcmp(name, STREAMING_ACTIVE_SINK_2) == 0)
+				{
+					// Device found! Kick the watchdog
+					k_timer_start(&my_timer_2, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+
+					LOG_INF("Sink 2 found! All is well! Kicking watchdog!:D");
+
+					// Streaming active!
+					led_on(LED_APP_3_GREEN);
 				}
                 break;
             }
@@ -609,6 +607,7 @@ void bt_ack_monitor_thread()
 void watchdog_init()
 {
 	k_timer_start(&my_timer, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
+	k_timer_start(&my_timer_2, K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT), K_SECONDS(DISCONNECTION_INDICATOR_TIMEOUT));
 }
 
 int main(void)
@@ -674,7 +673,9 @@ int main(void)
 	// Silence compiler warning
 	(void)my_tid;
 
+	// Start blinking - we are not connected yet
 	led_blink(LED_APP_1_BLUE);
+	led_blink(LED_APP_3_GREEN);
 
 	// Initialize the watchdog
 	watchdog_init();
